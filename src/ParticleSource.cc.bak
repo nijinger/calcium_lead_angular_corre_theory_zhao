@@ -1,0 +1,209 @@
+#include "ParticleSource.hh"
+
+#include "Randomize.hh"
+#include "G4ios.hh"
+#include "G4SystemOfUnits.hh"
+
+#include <fstream>
+#include <stdlib.h>
+#include <cmath>
+#include <map>
+
+G4bool BuildPhysicsTable(ParticleSource*aP,const char* filename,G4int index)
+{
+  G4cout<<"********Build Stopping Range For "<<filename<<" !"<<G4endl;
+  std::ifstream in(filename);
+  if(!in.is_open()) 
+  {
+    G4cout<<"cannot open file "<<filename<<" !"<<G4endl;
+    return 0;
+  }
+  G4double x(0),y(0);
+  std::map<G4double,G4double>* pre,*per;
+  if(index==1) 
+  {
+    pre=(&(aP->RecoilPTableRE));
+    per=(&(aP->RecoilPTableER));
+  }
+  else if(index==2)
+  {
+    pre=&(aP->ProjectilePTableRE);
+    per=&(aP->ProjectilePTableER);
+  }
+  while(1)
+  {
+    in>>x>>y;
+    if(!in.good()) break;
+    pre->insert(std::pair<G4double,G4double>(y,x));
+    per->insert(std::pair<G4double,G4double>(x,y));
+  }
+  G4cout<<"*********Find Out [ "<<pre->size()<<" ] data in file "<<filename<<" !"<<G4endl;
+  return 1;
+}
+
+
+ParticleSource::ParticleSource():TargetThickness(200),ReactionP(0),ReactionQ(0),theta(0),Theta(0),ff(0)
+{
+  if(!BuildPhysicsTable(this,"H-CH2.txt",1)) exit(1);
+  if(!BuildPhysicsTable(this,"20O-CH2.txt",2)) exit(1);
+  SetIncidentParticle(8,20,600,0,G4ThreeVector(0,0,1));
+//  Recoil.A=12;
+//  ReactionQ=-13.6;//MeV
+}
+
+ParticleSource::~ParticleSource(){}
+
+G4double ParticleSource::FindTableByKey(G4double key,G4int index)
+{
+  std::map<G4double,G4double>::iterator iter;
+  std::map<G4double,G4double>* pmap;
+  if(index==1) pmap=&RecoilPTableRE;
+  else if(index==2) pmap=&RecoilPTableER;
+  else if(index==3) pmap=&ProjectilePTableRE;
+  else if(index==4) pmap=&ProjectilePTableER;
+  else return -1;
+  if(pmap->size()<=0) return -1;
+  iter=pmap->lower_bound(key);
+  if(iter==pmap->begin()) return (iter->second)/(iter->first)*key;
+  G4double x1(0),x2(0),y1(0),y2(0);
+  y2=iter->second;x2=iter->first;
+  iter--;
+  y1=iter->second;x1=iter->first;
+  return (y2-y1)/(x2-x1)*(key-x1)+y1;
+}
+
+void ParticleSource::SetIncidentParticle(G4int Z,G4int A, G4double E,G4double excE, G4ThreeVector p,G4ThreeVector v)
+{
+     if(Z>A) {G4cout<<"Z: "<<Z<< "is bigger than A: "<<A<<G4endl; exit(1);}
+     Incident={Z,A,E,excE,p,v};
+}
+
+void ParticleSource::SetProjectileParticle(G4int Z,G4int A, G4double E,G4double excE, G4ThreeVector p,G4ThreeVector v)
+{
+     if(Z>A) {G4cout<<"Z: "<<Z<< "is bigger than A: "<<A<<G4endl; exit(1);}
+     Projectile={Z,A,E,excE,p,v};
+}
+
+G4double ParticleSource::GetRecoilDE(G4double energy, G4double pathL)
+{
+   G4double Range=FindTableByKey(energy,2);
+   if(Range<=pathL) return energy;
+   G4double ResidualR=Range-pathL;
+   G4double ResidualE=FindTableByKey(ResidualR,1);
+   return energy-ResidualE;
+}
+
+G4double ParticleSource::GetProjectileDE(G4double energy, G4double pathL)
+{
+   G4double Range=FindTableByKey(energy,4);
+   if(Range<=pathL) return energy;
+   if(pathL==0) return 0;
+   G4double ResidualR=Range-pathL;
+   G4double ResidualE=FindTableByKey(ResidualR,3);
+   return energy-ResidualE;
+}
+
+G4double ParticleSource::ReactionK(G4double tha) 
+{
+   G4double Aa=Incident.A;
+   G4double Ab=Projectile.A;
+   G4double AB=Recoil.A;
+   G4double Ea=Incident.E;
+   G4double Q=ReactionQ;
+   G4double th=tha;
+   G4double temp1=std::sqrt(Aa*Ab*Ea)/(AB+Ab)*std::cos(th);
+   G4double temp2=((AB-Aa)/(AB+Ab)+Aa*Ab/std::pow((AB+Ab),2)*std::cos(th)*std::cos(th))*Ea;
+   G4double temp3=AB/(AB+Ab)*Q;
+   if(temp2+temp3<0) return 0;
+   return std::pow(temp1+std::sqrt(temp2+temp3),2);
+}
+
+void ParticleSource::InelasticScattering()
+{
+   if(TargetThickness<=0)
+   {
+     G4cout<<"TargetThickness is less than 0!"<<G4endl;
+     exit(1);
+   }
+   /*
+   G4double ode=GetProjectileDE(Incident.E,ReactionP);
+   G4cout<<"Incident P Deposited E:"<<ode<<G4endl;
+
+   if(ode==Incident.E) 
+   {
+     Projectile.E=0;
+     Recoil.E=0;
+     return;
+   }
+
+   //update Incidented E
+   Incident.E=Incident.E-ode;
+   */
+   //Set Projectile Scattering Angle
+   SetProjectileAngle();
+   //Calculate the kinematicE of Projectile
+   Projectile.E=ReactionK(theta);
+
+   if(Projectile.E==0) 
+   {
+     Recoil.E=0;
+     return;
+   }
+   Recoil.E=Incident.E+ReactionQ-Projectile.E;
+
+   //Select Random phi angle for Projectile
+//   G4double phi=(G4UniformRand())*360.*deg;
+   G4double phi=1.*deg;
+   G4double temp=std::sin(theta);
+   Projectile.p=G4ThreeVector(temp*std::cos(phi),temp*std::sin(phi),std::cos(theta));
+   G4double temp1=(std::sqrt(Incident.E*Incident.A)-std::sqrt(Projectile.A*Projectile.E)*std::cos(theta))/std::sqrt(Recoil.E*Recoil.A);
+   Theta=std::acos(temp1);
+   G4cout<<"Theta!!!!!!-------------!!!!!!:"<<Theta/deg<<G4endl;
+   TreeManager *tm=TreeManager::GetTreeManager();
+   tm->SetRecA(Theta);
+   temp1=std::sin(Theta);
+   Recoil.p=G4ThreeVector(temp1*std::cos(phi+M_PI),temp1*std::sin(phi+M_PI),std::cos(Theta));
+
+}
+
+void ParticleSource::TransportProj()
+{
+  G4double ResidualR=TargetThickness-ReactionP;
+  G4double ProjectileR=ResidualR/std::cos(theta);
+
+  Projectile.E=Projectile.E-GetProjectileDE(Projectile.E,ProjectileR);
+
+}
+
+void ParticleSource::TransportRecoil()
+{
+  G4double ResidualR=TargetThickness-ReactionP;
+  G4double RecoilR=ResidualR/std::cos(Theta);
+
+  Recoil.E=Recoil.E-GetRecoilDE(Recoil.E,RecoilR);
+
+}
+
+Double_t expsin(Double_t *x,Double_t *par){
+  return std::abs(std::exp(-x[0]/par[0])*std::sin(x[0]));
+}
+
+G4double ParticleSource::sample(G4double tau){
+  if(ff==NULL){
+    ff=new TF1("ff",expsin,0,M_PI,1);
+  }
+  ff->SetParameter(0,tau);
+  return ff->GetRandom();
+}
+
+void ParticleSource::SetProjectileAngle() //Can be modified by cross-section
+{
+//   theta=G4UniformRand()*3.*deg;//outgoing angle is less than 30 degree
+   theta=14.*deg;
+   theta=sample(10*deg);
+   TreeManager *tm=TreeManager::GetTreeManager();
+   tm->SetProjA(theta);
+
+//   theta=2.*deg;
+//   theta=G4RandGauss::shoot(15.*deg,1.*deg);
+}

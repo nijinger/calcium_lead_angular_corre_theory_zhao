@@ -1,0 +1,70 @@
+#ifndef ParticleDecay_h
+#define ParyicleDecay_h
+
+#include "ParticleDefinition.hh"
+#include "G4ThreeVector.hh"
+#include <cmath>
+#include <map>
+#include <vector>
+#include "globals.hh"
+#include <TF1.h>
+
+class ParticleDecay
+{
+public:
+  ParticleDecay();
+  ~ParticleDecay();
+
+  friend G4bool BuildPhysicsTable(ParticleDecay *aP,const char *filename, G4int index);
+  void SetMotherP(G4int Z=8, G4int A=20,G4double E=0,G4double excE=0,G4ThreeVector p=G4ThreeVector(0,0,1),G4ThreeVector v=G4ThreeVector(0,0,1));
+  void SetMotherP(const Particle &par);
+  void SetMotherExcE(G4double excE){mother.excE=excE;}
+  void SetDauP1(G4int Z=2, G4int A=4, G4double E=0, G4double excE=0,G4ThreeVector p=G4ThreeVector(0,0,1),G4ThreeVector v=G4ThreeVector(0,0,1));
+  void SetDauP2(G4int Z=6, G4int A=16, G4double E=0, G4double excE=0,G4ThreeVector p=G4ThreeVector(0,0,1),G4ThreeVector v=G4ThreeVector(0,0,1));
+  void SetDecayTh(G4double Dth){DecayTh=Dth;}// Decay threshold
+  void SetResidualPathL(G4double l){ResiL=l;}
+  void SetDecayOrbitalAngM(G4int l){OrbitalAM=std::abs(l);}
+
+
+  G4bool DecayProcess();
+  Particle   GetDau1(){return daughter1;}
+  Particle   GetDau2(){return daughter2;}
+  G4double   GetDau1Ang(){return dau1ang;}
+  G4double   GetDau2Ang(){return dau2ang;}
+  G4double   GetDecayAng(){return decayang;}
+  G4double   GetDecayAngCM(){return DecayAngleCM;}
+
+  void  Transport();
+private:
+  
+
+  void   SetDecayAngleCM();
+  void   GetDaughterVelocityCM(long double ecmk,long double ecmR);
+  void   GetMotherVelocityLAB();
+  G4double SearchTableByKey(G4double key,G4int index);
+  G4double GetDau1DE(G4double energy, G4double pathL);
+  G4double GetDau2DE(G4double energy, G4double pathL);
+
+
+  G4double DecayTh;
+  TF1 *flegendre;
+  G4int    OrbitalAM;
+  long double DecayAngleCM; //daughter project angle in center mass coordinate 
+  G4double      ResiL;
+  G4ThreeVector dauv1CM;
+  G4ThreeVector dauv2CM;
+
+  Particle mother;
+  Particle daughter1;
+  Particle daughter2;
+  G4double dau1ang;
+  G4double dau2ang;
+  G4double decayang;
+
+  std::map<G4double,G4double> Dau1TableRE; //index1
+  std::map<G4double,G4double> Dau1TableER; //index2
+  std::map<G4double,G4double> Dau2TableRE; //index3
+  std::map<G4double,G4double> Dau2TableER; //index4
+};
+
+#endif

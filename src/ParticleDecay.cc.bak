@@ -1,0 +1,257 @@
+#include <TROOT.h>
+#include <TMath.h>
+#include <Math/SpecFunc.h>
+#include "ParticleDecay.hh"
+#include "G4ios.hh"
+#include "Randomize.hh"
+
+const G4double u = 931.494061; //MeV/c^2
+//const G4double m_He = 4.00260325413 * u;
+const G4double m_He = 4.;
+//const G4double m_Carbon16 = 16.014701252 * u; 
+const G4double m_Carbon16 = 16.; 
+//const G4double m_Oxygen20 = 20.004075354 * u;
+const G4double m_Oxygen20 = 20.;
+const long double PI=3.141592653589793238;
+const G4double deg=PI/180.;
+
+G4double Legendre(G4double *x,G4double *par)
+{
+  return TMath::Abs(ROOT::Math::sph_legendre(par[0],par[1],x[0]));
+}
+
+G4bool BuildPhysicsTable(ParticleDecay *aP, const char *filename,G4int index)
+{
+  G4cout<<"**********Build Stopping Range For "<<filename<<" !"<<G4endl; 
+  std::ifstream in(filename);
+  if(!in.is_open())
+  {
+    G4cout<<"cannot open file "<<filename<<" !"<<G4endl;
+    return 0;
+  }
+  G4double x(0),y(0);
+  std::map<G4double,G4double>* pre,*per;
+  if(index==1) 
+  {
+    pre=(&(aP->Dau1TableRE));
+    per=(&(aP->Dau1TableER));
+  }
+  else if(index==2)
+  {
+    pre=&(aP->Dau2TableRE);
+    per=&(aP->Dau2TableER);
+  }
+  while(1)
+  {
+    in>>x>>y;
+    if(!in.good()) break;
+    pre->insert(std::pair<G4double,G4double>(y,x));
+    per->insert(std::pair<G4double,G4double>(x,y));
+  }
+  G4cout<<"*********Find Out [ "<<pre->size()<<" ] data in file "<<filename<<" !"<<G4endl;
+  return 1;
+}
+
+
+ParticleDecay::ParticleDecay(): DecayTh(0), DecayAngleCM(0), OrbitalAM(6)
+{
+  if(!BuildPhysicsTable(this,"4He-CH2.txt",1)) exit(1);
+  if(!BuildPhysicsTable(this,"16C-CH2.txt",2)) exit(1);
+
+  SetMotherP();
+  SetDauP1();
+  SetDauP2();
+
+  flegendre=new TF1("Legendre",Legendre,0,TMath::Pi(),2);
+  flegendre->SetParameters(6,0);
+}
+
+ParticleDecay::~ParticleDecay()
+{}
+
+void ParticleDecay::SetMotherP(G4int Z,G4int A,G4double E, G4double excE,G4ThreeVector p, G4ThreeVector v)
+{
+  mother={Z,A,E,excE,p,v};
+}
+
+void ParticleDecay::SetMotherP(const Particle& par)
+{
+  mother=par;
+}
+
+void ParticleDecay::SetDauP1(G4int Z,G4int A,G4double E,G4double excE,G4ThreeVector p,G4ThreeVector v)
+{
+  if(Z>A) 
+  {
+    G4cout<<"Illegal Parameter for daughter particle 1"<<G4endl
+          <<"Z is bigger than A!!!!"<<G4endl;
+	  exit(1);
+  }
+  daughter1={Z,A,E,excE,p,v};
+}
+
+void ParticleDecay::SetDauP2(G4int Z,G4int A,G4double E,G4double excE,G4ThreeVector p,G4ThreeVector v)
+{
+  if(Z>A) 
+  {
+    G4cout<<"Illegal Parameter for daughter particle 2"<<G4endl
+          <<"Z is bigger than A!!!!"<<G4endl;
+	  exit(1);
+  }
+  daughter2={Z,A,E,excE,p,v};
+}
+
+void ParticleDecay::SetDecayAngleCM()
+{
+//  DecayAngleCM=std::acos((G4UniformRand()-0.5)*2); // rad
+//  flegendre->SetParameter(0,OrbitalAM);
+//  DecayAngleCM=flegendre->GetRandom();
+    DecayAngleCM = G4UniformRand()*2-1;
+    DecayAngleCM = std::acos(DecayAngleCM);
+}
+
+G4bool ParticleDecay::DecayProcess()
+{
+  if(daughter1.A<=0||daughter2.A<=0)
+  {
+    G4cout<<"Illegal Daughter Particle Atom Number!"<<G4endl;
+    exit(1);
+  }
+  if((daughter1.A+daughter2.A)!=mother.A||(daughter1.Z+daughter2.Z)!=mother.Z)
+  {
+     G4cout<<"Illegal Decay Products For Z: "<<mother.Z<<", A: "<<mother.A<<G4endl;
+     exit(1);
+  }
+
+  //********Decay Energy Allocation***********//
+  G4double Edecay=mother.excE-DecayTh;
+  if(Edecay<0||mother.E<=0)
+  {
+    daughter1.E=0;
+    daughter2.E=0;
+    return 0;
+  }
+  long double Ak=daughter1.A;
+  long double AR=daughter2.A;
+  long double Ad=mother.A;
+  long double Ek=AR/Ad*Edecay;
+  long double ER=Ak/Ad*Edecay;
+
+  GetDaughterVelocityCM(Ek,ER);//Ek--Alpha ER--Carbon16
+  GetMotherVelocityLAB();
+
+  daughter1.v=mother.v+dauv1CM;
+  daughter2.v=mother.v+dauv2CM;
+
+  daughter1.p=daughter1.v;
+  daughter1.p.setMag(1);
+  daughter2.p=daughter2.v;
+  daughter2.p.setMag(1);
+
+  daughter1.E = 0.5*Ak*daughter1.v.mag2();
+  daughter2.E = 0.5*AR*daughter2.v.mag2();
+
+  daughter1.excE=0.;
+  daughter2.excE=0.;
+
+  G4ThreeVector beamD(0,0,1);
+  dau1ang = daughter1.v.angle(beamD)/deg;
+  dau2ang = daughter2.v.angle(beamD)/deg;
+  decayang = daughter1.v.angle(daughter2.v)/deg;
+
+  return 1;
+}
+
+void ParticleDecay::GetDaughterVelocityCM(long double ecmk, long double ecmR)
+{
+  if(ecmk<=0||ecmR<=0)
+  {
+    dauv1CM=G4ThreeVector(0,0,0);
+    dauv2CM=G4ThreeVector(0,0,0);
+    return;
+  }
+  long double v1(0), v2(0);
+  v1 = std::sqrt(2*daughter1.A*ecmk)/daughter1.A;
+  v2 = std::sqrt(2*daughter2.A*ecmR)/daughter2.A;
+  
+  SetDecayAngleCM();
+
+//  long double phi = G4UniformRand()*2*PI;
+  long double phi = PI;
+  dauv1CM.setX(v1*std::sin(DecayAngleCM)*std::cos(phi));
+  dauv1CM.setY(v1*std::sin(DecayAngleCM)*std::sin(phi));
+  dauv1CM.setZ(v1*std::cos(DecayAngleCM));
+
+  DecayAngleCM=PI-DecayAngleCM;
+  phi+=PI;
+  dauv2CM.setX(v2*std::sin(DecayAngleCM)*std::cos(phi));
+  dauv2CM.setY(v2*std::sin(DecayAngleCM)*std::sin(phi));
+  dauv2CM.setZ(v2*std::cos(DecayAngleCM));
+
+  DecayAngleCM=PI-DecayAngleCM;
+}
+
+void ParticleDecay::GetMotherVelocityLAB()
+{
+  if(mother.E<=0) 
+  {
+    mother.v = G4ThreeVector(0,0,0);
+    return;
+  }
+  G4double v = std::sqrt(2*mother.A*mother.E)/mother.A;
+  G4double phi=mother.p.phi();
+  G4double theta=mother.p.theta();
+  mother.v.setX(v*std::sin(theta)*std::cos(phi));
+  mother.v.setY(v*std::sin(theta)*std::sin(phi));
+  mother.v.setZ(v*std::cos(theta));
+}
+
+G4double ParticleDecay::SearchTableByKey(G4double key,G4int index)
+{
+  std::map<G4double,G4double>::iterator iter;
+  std::map<G4double,G4double>* pmap;
+  if(index==1) pmap=&Dau1TableRE;
+  else if(index==2) pmap=&Dau1TableER;
+  else if(index==3) pmap=&Dau2TableRE;
+  else if(index==4) pmap=&Dau2TableER;
+  else return -1;
+  if(pmap->size()<=0) return -1;
+  iter=pmap->lower_bound(key);
+  if(iter==pmap->begin()) return (iter->second)/(iter->first)*key;
+  G4double x1(0),x2(0),y1(0),y2(0);
+  y2=iter->second;x2=iter->first;
+  iter--;
+  y1=iter->second;x1=iter->first;
+  return (y2-y1)/(x2-x1)*(key-x1)+y1;
+}
+
+G4double ParticleDecay::GetDau1DE(G4double energy, G4double pathL)
+{
+  G4double Range=SearchTableByKey(energy,2);
+  if(Range<=pathL) return energy;
+  G4double ResidualR=Range-pathL;
+  G4double ResidualE=SearchTableByKey(ResidualR,1);
+  return energy-ResidualE;
+}
+
+G4double ParticleDecay::GetDau2DE(G4double energy, G4double pathL)
+{
+  G4double Range=SearchTableByKey(energy,4);
+  if(Range<=pathL) return energy;
+  G4double ResidualR=Range-pathL;
+  G4double ResidualE=SearchTableByKey(ResidualR,3);
+  return energy-ResidualE;
+}
+
+void ParticleDecay::Transport()
+{
+  if(ResiL<=0) return;
+  G4ThreeVector TargetD(0,0,1);
+  G4double theta1=daughter1.v.angle(TargetD);
+  G4double theta2=daughter2.v.angle(TargetD);
+  G4double dau1RL=ResiL/std::cos(theta1);
+  G4double dau2RL=ResiL/std::cos(theta2);
+
+  daughter1.E=daughter1.E-GetDau1DE(daughter1.E,dau1RL);
+  daughter2.E=daughter2.E-GetDau2DE(daughter2.E,dau2RL);
+}

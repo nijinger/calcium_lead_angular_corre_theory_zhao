@@ -1,0 +1,79 @@
+#ifndef ParticleSource_hh
+#define ParticleSource_hh
+
+#include "globals.hh"
+#include "G4ThreeVector.hh"
+#include <map>
+#include <vector>
+#include "ParticleDefinition.hh"
+#include "TreeManager.hh"
+#include <TF1.h>
+
+
+class ParticleSource
+{
+public:
+   ParticleSource();
+   ~ParticleSource();
+
+   void SetTargetThickness(G4double thick)
+   {TargetThickness=thick;}
+
+   void SetReactionPoint(G4double reactionP)
+   {ReactionP=reactionP;}
+
+   void SetReactionQ(G4double Q)
+   {ReactionQ=Q;} 
+
+  void SetIncidentParticle(G4int Z,G4int A,G4double E,G4double exctE,G4ThreeVector p=G4ThreeVector(0,0,1),G4ThreeVector v=G4ThreeVector(0,0,1));
+  void SetProjectileParticle(G4int Z,G4int A,G4double E,G4double exctE,G4ThreeVector p=G4ThreeVector(0,0,1),G4ThreeVector v=G4ThreeVector(0,0,1));
+   void SetRecoilParticle(G4int Z,G4int A)
+   {
+   if(Z>A) 
+   {
+     G4cout<<"Z: "<<Z<< "is bigger than A: "<<A<<G4endl;
+     exit(1);
+   }
+   Recoil={Z,A,0,0,G4ThreeVector(0,0,1),G4ThreeVector(0,0,1)};}
+     
+   friend G4bool BuildPhysicsTable(ParticleSource *aP,const char*filename,G4int index);
+   G4double FindTableByKey(G4double key,G4int index);
+   G4double ReactionK(G4double theta);
+
+   void     InelasticScattering();
+   void     TransportProj();
+   void     TransportRecoil();
+
+   Particle GetProjectile(){return Projectile;}
+   Particle GetRecoil(){return Recoil;}
+
+   void     SetProjectileAngle();
+   G4double GetRecoilA(){return Theta;}
+   G4double GetProjA(){return theta;}
+
+private:
+   G4double GetRecoilDE(G4double,G4double); 
+   G4double GetProjectileDE(G4double,G4double); 
+
+
+   //Data member
+   G4double TargetThickness; //um
+   G4double ReactionP;   //Reaction Point um
+   G4double ReactionQ;   //Reaction Q value  MeV
+   Particle Incident;
+   Particle Projectile;
+   Particle Recoil;
+
+   G4double theta;  //Projectile angle
+   G4double Theta;  //Recoil angle
+
+   std::map<G4double,G4double> RecoilPTableRE; //index = 1
+   std::map<G4double,G4double> RecoilPTableER; //index = 2
+   std::map<G4double,G4double> ProjectilePTableRE; //index = 3
+   std::map<G4double,G4double> ProjectilePTableER; //index = 4
+
+   TF1 *ff;
+   G4double sample(G4double);
+};
+
+#endif
