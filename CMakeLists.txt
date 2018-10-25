@@ -29,7 +29,7 @@ find_package(ROOT REQUIRED)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${ROOT_INCLUDE_DIRS})
 message(STATUS "${ROOT_INCLUDE_DIRS}=${${ROOT_INCLUDE_DIRS}}")
-message(STATUS "${PROJECT_SOURCE_DIR}=${${PROJECT_SOURCE_DIR}}")
+#message(STATUS "${PROJECT_SOURCE_DIR}=${${PROJECT_SOURCE_DIR}}")
 
 
 #----------------------------------------------------------------------------
