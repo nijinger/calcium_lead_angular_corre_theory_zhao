@@ -21,6 +21,7 @@ include(${Geant4_USE_FILE})
 #set(CMAKE_MODULE_PATH ${CAMKE_MODULE_PATH} /etc/root/cmake)
 #set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} /usr/local/geant4/lib64/Geant4-10.0.2/Modules)
 find_package(ROOT REQUIRED)
+find_package(ROOT COMPONENTS MathMore)
 
 #----------------------------------------------------------------------------
 # Setup Geant4 include directories and compile definitions
@@ -43,7 +44,7 @@ file(GLOB headers ${PROJECT_SOURCE_DIR}/include/*.hh)
 # Add the executable, and link it to the Geant4 libraries
 #
 add_executable(tele tele.cpp ${sources} ${headers})
-target_link_libraries(tele ${Geant4_LIBRARIES} ${ROOT_LIBRARIES} -lMathMore)
+target_link_libraries(tele ${Geant4_LIBRARIES} ${ROOT_LIBRARIES})
 #target_link_libraries(tele ${Geant4_LIBRARIES})
 
 #----------------------------------------------------------------------------
