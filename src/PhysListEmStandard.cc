@@ -26,7 +26,7 @@
 /// \file electromagnetic/TestEm0/src/PhysListEmStandard.cc
 /// \brief Implementation of the PhysListEmStandard class
 //
-// $Id: PhysListEmStandard.cc 68539 2013-04-01 22:08:14Z adotti $
+// $Id: PhysListEmStandard.cc 100291 2016-10-17 08:49:09Z gcosmo $
 //
 //....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
 //....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo...... 
@@ -81,9 +81,10 @@ void PhysListEmStandard::ConstructProcess()
   
   // Add standard EM Processes
   //
-  aParticleIterator->reset();
-  while( (*aParticleIterator)() ){
-    G4ParticleDefinition* particle = aParticleIterator->value();
+  auto particleIterator=GetParticleIterator();
+  particleIterator->reset();
+  while( (*particleIterator)() ){
+    G4ParticleDefinition* particle = particleIterator->value();
     G4String particleName = particle->GetParticleName();
      
     if (particleName == "gamma") {
@@ -133,7 +134,7 @@ void PhysListEmStandard::ConstructProcess()
 
       ph->RegisterProcess(new G4hMultipleScattering(), particle);      
       G4hIonisation* hIoni = new G4hIonisation();
-      hIoni->SetStepFunction(0.1, 1*um);
+      hIoni->SetStepFunction(0.1, 20*um);
       ph->RegisterProcess(hIoni, particle);
       ph->RegisterProcess(new G4hBremsstrahlung(), particle);
       ph->RegisterProcess(new G4hPairProduction(), particle);            
@@ -149,7 +150,7 @@ void PhysListEmStandard::ConstructProcess()
             
     } else if( particleName == "GenericIon" ) {
 
-//      ph->RegisterProcess(new G4hMultipleScattering(), particle);          
+      ph->RegisterProcess(new G4hMultipleScattering(), particle);          
       G4ionIonisation* ionIoni = new G4ionIonisation();
       ionIoni->SetEmModel(new G4IonParametrisedLossModel());
       ionIoni->SetStepFunction(0.1, 1*um);

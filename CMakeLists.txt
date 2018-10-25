@@ -27,7 +27,9 @@ find_package(ROOT REQUIRED)
 # Setup include directory for this project
 #
 include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${ROOT_INCLUDE_DIR})
+include_directories(${ROOT_INCLUDE_DIRS})
+message(STATUS "${ROOT_INCLUDE_DIRS}=${${ROOT_INCLUDE_DIRS}}")
+message(STATUS "${PROJECT_SOURCE_DIR}=${${PROJECT_SOURCE_DIR}}")
 
 
 #----------------------------------------------------------------------------

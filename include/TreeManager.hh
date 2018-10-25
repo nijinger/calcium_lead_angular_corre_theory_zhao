@@ -2,7 +2,7 @@
 #define TreeManager_h
 
 #include "globals.hh"
-#include "TROOT.h"
+#include <TROOT.h>
 
 class TFile;
 class TTree;
